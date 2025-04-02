@@ -40,10 +40,17 @@ def train_model(
 # === MAIN ===
 if __name__ == "__main__":
     cache_path = os.environ.get("RAINBOW_MOUSE_CACHE")
-    lfp = np.load(f"{cache_path}/lfp_X.npy")[:,:118*30].T         # [95, 5900]
+    lfp = np.load(f"{cache_path}/lfp_X.npy")[:,:118*30]         # [95, 5900]
+    #print('badaboom', lfp.shape)
     frames = np.load(f"{cache_path}/lfp_y.npy")[:118*30]     # [5900]
     print(lfp.shape, frames.shape)
     vit_embeddings = np.load(f"{cache_path}/vit_embeddings.npy")  # [95, 48]
+
+    print('Zscore mean', np.mean(lfp, axis=1), 'std', np.std(lfp, axis=0))
+
+    # Normalize LFP data
+    lfp = (lfp - np.mean(lfp, axis=1, keepdims=True)) / np.std(lfp, axis=1, keepdims=True)
+    
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = train_model(lfp, frames, vit_embeddings, device=device)

@@ -18,8 +18,9 @@ def sample_task_batch(lfp, frames, vit_embeddings, batch_size=128, device="cpu")
     - channel_idx: Tensor of shape [B] (long)
     - y_target: Tensor of shape [B] (float)
     """
-    n_channels = lfp.shape[1]
-    time_points = lfp.shape[0]
+    #print('Boom ', lfp.shape)
+    n_channels = lfp.shape[0]
+    time_points = lfp.shape[1]
 
     # Sample random (channel, time) pairs
     sampled_channels = np.random.randint(0, n_channels, size=batch_size)
@@ -30,7 +31,7 @@ def sample_task_batch(lfp, frames, vit_embeddings, batch_size=128, device="cpu")
     vit_vecs = vit_embeddings[frame_ids]  # [B, 48]
 
     # Get LFP targets for the sampled (time, channel) pairs
-    targets = lfp[sampled_times, sampled_channels]  # [B]
+    targets = lfp[sampled_channels, sampled_times]  # [B]
 
     return (
         torch.tensor(vit_vecs, dtype=torch.float32).to(device),
