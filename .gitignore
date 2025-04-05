@@ -176,3 +176,5 @@ cython_debug/
 *.pth
 *.npy
 /umapvenv
+/src/rainbow_mouse/lfp_shape/waveform_imgs_base64
+/src/rainbow_mouse/lfp_shape/waveform_images
