@@ -138,3 +138,109 @@ def train_cebra_time_relu(data, input_dim, hidden_dim, output_dim, num_layers=3,
     print(f"ReLU model saved to {model_path}")
 
     return encoder
+
+import torch
+import torch.nn as nn
+
+class MultiFreqSIRENLayer(nn.Module):
+    def __init__(self, in_features, out_features, frequencies, is_first=False):
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.frequencies = frequencies
+        self.is_first = is_first
+        self._init_weights()
+
+    def _init_weights(self):
+        with torch.no_grad():
+            if self.is_first:
+                self.linear.weight.uniform_(-1 / self.linear.in_features, 1 / self.linear.in_features)
+            else:
+                bound = 6 / self.linear.in_features
+                self.linear.weight.uniform_(-bound, bound)
+
+    def forward(self, x):
+        base = self.linear(x)
+        components = [torch.sin(ω * base) for ω in self.frequencies]
+        return torch.cat(components, dim=-1)
+
+class MultiFreqSIRENEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim,
+                 frequencies=[5.0, 10.0, 30.0, 60.0], num_layers=3):
+        super().__init__()
+        self.frequencies = frequencies
+        freq_count = len(frequencies)
+
+        layers = [
+            MultiFreqSIRENLayer(input_dim, hidden_dim, frequencies, is_first=True),
+        ]
+        for _ in range(num_layers - 2):
+            layers.append(MultiFreqSIRENLayer(hidden_dim * freq_count, hidden_dim, frequencies))
+
+        layers.append(nn.Linear(hidden_dim * freq_count, output_dim))
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.network(x)
+
+def train_cebra_time_multifreq_siren(data, input_dim, hidden_dim, output_dim,
+                                     frequencies=[5, 10, 30, 60], num_layers=3,
+                                     epochs=1000, batch_size=128, learning_rate=1e-3,
+                                     model_path="cebra_multifreq_siren.pt"):
+    encoder = MultiFreqSIRENEncoder(input_dim, hidden_dim, output_dim,
+                                    frequencies=frequencies, num_layers=num_layers)
+    sampler = TimeContrastiveSampler(data, window_size=5, batch_size=batch_size)
+    criterion = ContrastiveLoss(temperature=0.1)
+    optimizer = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
+
+    for epoch in range(epochs):
+        ref, pos, neg = sampler.sample()
+        z_ref = encoder(ref)
+        z_pos = encoder(pos)
+        z_neg = encoder(neg)
+
+        loss = criterion(z_ref, z_pos, z_neg)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if epoch % 100 == 0:
+            print(f"[MultiFreq SIREN] Epoch {epoch}, Loss: {loss.item():.4f}")
+
+    torch.save(encoder.state_dict(), model_path)
+    print(f"Multi-frequency SIREN model saved to {model_path}")
+
+    return encoder
+
+def visualize_embedding_3d_multifreq_siren(data, encoder_path, input_dim, hidden_dim, output_dim,
+                                           frequencies=[5, 10, 30, 60], num_layers=3,
+                                           title="3D Multi-Frequency SIREN Embedding of LFP"):
+    encoder = MultiFreqSIRENEncoder(input_dim, hidden_dim, output_dim,
+                                    frequencies=frequencies, num_layers=num_layers)
+    encoder.load_state_dict(torch.load(encoder_path))
+    encoder.eval()
+
+    with torch.no_grad():
+        embeddings = encoder(torch.tensor(data, dtype=torch.float32))
+
+    # PCA if needed
+    if output_dim > 3:
+        from sklearn.decomposition import PCA
+        print(f"Reducing {output_dim}D embedding to 3D using PCA")
+        embeddings = PCA(n_components=3).fit_transform(embeddings.numpy())
+    else:
+        embeddings = embeddings.numpy()
+
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(embeddings[:, 0], embeddings[:, 1], embeddings[:, 2], color='seagreen')
+    ax.set_title(title)
+    ax.set_xlabel("Latent 1")
+    ax.set_ylabel("Latent 2")
+    ax.set_zlabel("Latent 3")
+    plt.tight_layout()
+    plt.show()
+
+
