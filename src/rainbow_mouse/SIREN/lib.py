@@ -230,6 +230,8 @@ def visualize_embedding_3d_multifreq_siren(data, encoder_path, input_dim, hidden
     else:
         embeddings = embeddings.numpy()
 
+    import matplotlib
+    matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D
 
@@ -243,4 +245,68 @@ def visualize_embedding_3d_multifreq_siren(data, encoder_path, input_dim, hidden
     plt.tight_layout()
     plt.show()
 
+
+import matplotlib
+matplotlib.use("TkAgg")  # Enables interactive GUI windows
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # required for 3D plotting
+from sklearn.decomposition import PCA
+import torch
+import numpy as np
+
+import matplotlib
+matplotlib.use("Agg")  # Non-interactive backend for saving animations
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import animation
+from sklearn.decomposition import PCA
+import torch
+import numpy as np
+
+def animate_embedding_3d_multifreq_siren(data, encoder_path, input_dim, hidden_dim, output_dim,
+                                         frequencies=[5, 10, 30, 60], num_layers=3,
+                                         title="3D Embedding Animation", save_path="embedding_rotation.mp4"):
+    # Load trained model
+    encoder = MultiFreqSIRENEncoder(input_dim, hidden_dim, output_dim,
+                                    frequencies=frequencies, num_layers=num_layers)
+    encoder.load_state_dict(torch.load(encoder_path))
+    encoder.eval()
+
+    with torch.no_grad():
+        embeddings = encoder(torch.tensor(data, dtype=torch.float32))
+
+    # Reduce to 3D if needed
+    if output_dim > 3:
+        embeddings = PCA(n_components=3).fit_transform(embeddings.numpy())
+    else:
+        embeddings = embeddings.numpy()
+
+    # Setup figure
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_title(title)
+    ax.set_xlabel("Latent 1")
+    ax.set_ylabel("Latent 2")
+    ax.set_zlabel("Latent 3")
+
+    # Plot static points
+    scatter = ax.plot(embeddings[:, 0], embeddings[:, 1], embeddings[:, 2], color='seagreen')[0]
+
+    # Rotation update function
+    def update(angle):
+        ax.view_init(elev=30, azim=angle)
+        return fig,
+
+    # Create animation
+    ani = animation.FuncAnimation(fig, update, frames=np.arange(0, 360, 2), blit=False)
+
+    # Save as mp4 or gif
+    if save_path.endswith(".gif"):
+        ani.save(save_path, writer="pillow", fps=20)
+    else:
+        ani.save(save_path, writer="ffmpeg", fps=20)
+
+    print(f"Saved rotating animation to {save_path}")
 
